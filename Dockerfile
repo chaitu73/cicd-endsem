@@ -1,20 +1,22 @@
-# ---------- Build stage ----------
-FROM maven:3.9-eclipse-temurin-21 AS build
+# Stage 1: build with Maven + JDK 21
+FROM maven:3.9.5-eclipse-temurin-21 AS build
 WORKDIR /app
 
+# Copy only what's needed for dependency resolution first (speeds up rebuilds)
 COPY pom.xml .
-# Cache deps to speed up rebuilds
-RUN --mount=type=cache,target=/root/.m2 mvn -B -DskipTests dependency:go-offline
+RUN mvn -B -f pom.xml dependency:go-offline
 
+# Copy source and build
 COPY src ./src
-RUN --mount=type=cache,target=/root/.m2 mvn -B -DskipTests clean install package
+RUN mvn -B -f pom.xml clean package -DskipTests
 
-# ---------- Run stage ----------
-FROM eclipse-temurin:21-jre-alpine
+# Stage 2: runtime with JRE 21
+FROM eclipse-temurin:21-jre
 WORKDIR /app
 
-COPY --from=build /app/target/*.jar app.jar
+# Copy the jar from build stage (adjust path to your artifact)
+COPY --from=build /app/target/*.jar /app/app.jar
 
-ENV JAVA_OPTS=""
-EXPOSE 8081
-ENTRYPOINT ["sh","-c","java $JAVA_OPTS -jar app.jar"]
+# If your app expects environment vars or specific port, adapt here:
+EXPOSE 8080
+ENTRYPOINT ["java","-jar","/app/app.jar"]
